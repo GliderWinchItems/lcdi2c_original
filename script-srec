@@ -1,0 +1,2 @@
+#!/bin/bash
+$ARM_PREFIX/bin/arm-none-eabi-objcopy -O srec lcdi2cB.elf lcdi2cB.srec

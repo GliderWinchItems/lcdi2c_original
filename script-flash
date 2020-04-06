@@ -1,0 +1,26 @@
+#!/bin/bash
+# Paths for openocd and automatic flashing
+# The following two are 'export'ed in .arm_tools via .profile
+#OPENOCD_BASE	= /usr/share
+#OPENOCD		   = /usr/bin/openocd
+
+OPENOCD_SCRIPTS=$OPENOCD_BASE/openocd/scripts
+OPENOCD_FLASHER=$OPENOCD_SCRIPTS/interface/stlink-v2.cfg
+OPENOCD_BOARD=$OPENOCD_SCRIPTS/board/stm32f4discovery.cfg
+
+echo
+echo "---- PATHS for OPENOCD ----"
+echo "OPENOCD_SCRIPTS: $OPENOCD_SCRIPTS"
+echo "OPENOCD_FLASHER: $OPENOCD_FLASHER"
+echo "OPENOCD_BOARD:   $OPENOCD_BOARD"
+echo "FILE NAME: $1"
+echo
+
+$OPENOCD -s $OPENOCD_SCRIPTS \
+		       -f $OPENOCD_FLASHER \
+		       -f $OPENOCD_BOARD \
+		       -c "init" -c "reset halt" \
+		       -c "flash write_image erase $1.srec" \
+		       -c "reset" \
+		       -c "shutdown" $NULL
+
