@@ -24,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "LcdTask.h"
 #include "lcd_hd44780_i2c.h"
 #include "morse.h"
 /* USER CODE END Includes */
@@ -55,7 +56,9 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4
 };
 /* USER CODE BEGIN PV */
-
+struct LCDI2C_UNIT* plcd4x20;
+struct LCDI2C_UNIT* plcd4x16;
+struct LCDI2C_UNIT* plcd2x16;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -132,7 +135,24 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+
+  /* LCD task */
+  osThreadId osRet;
+  // Arguments: (priority, queue (LcdTaskQHandle) size for control block ptrs)
+  osRet = xLcdTaskCreate(0, 32); 
+  if (osRet == NULL) morse_trap(119);
+
+  /* Instantiate each LCD unit with I2C and address on bus. */
+  plcd4x20 = xLcdTaskcreateunit(&hi2c1,0x27,4,20);
+  if (plcd4x20 == NULL) morse_trap(227);
+  
+  plcd4x16 = xLcdTaskcreateunit(&hi2c1,0x26,4,16);
+  if (plcd4x16 == NULL) morse_trap(226);
+  
+  plcd2x16 = xLcdTaskcreateunit(&hi2c1,0x25,2,16);
+  if (plcd2x16 == NULL) morse_trap(225);
+
+
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -282,8 +302,11 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
-	struct LCDPARAMS* pu1;
-	pu1 = lcdInit(&hi2c1, (uint8_t)0x27, (uint8_t)4, (uint8_t)20);
+
+
+
+//	struct LCDPARAMS* pu1;
+	struct LCDPARAMS* pu1 = &plcd4x20->lcdparams;
 	if (pu1 == NULL) morse_trap(55);
     // Print text and home position 0,0
     lcdPrintStr(pu1,(uint8_t*)"1 Hello,", 8);

@@ -33,6 +33,7 @@ extern "C" {
 #endif
 
 #include "stm32f4xx_hal.h"
+#include "LcdTask.h"
 
 #define LCD_BIT_RS                 ((uint8_t)0x01U)
 #define LCD_BIT_RW                 ((uint8_t)0x02U)
@@ -71,7 +72,6 @@ extern "C" {
 #define LCD_BIT_CURSOR_SHIFT_DIR_R ((uint8_t)0x40U)
 #define LCD_BIT_CURSOR_SHIFT_DIR_L ((uint8_t)0x00U)
 
-
 /* Function defines */
 #define lcdBacklightOn(p1)           lcdBacklight(p1,LCD_BIT_BACKIGHT_ON)
 #define lcdBacklightOff(p1)          lcdBacklight(p1,LCD_BIT_BACKIGHT_OFF)
@@ -107,6 +107,8 @@ typedef struct {
 } LCDParams;
 #endif
 
+typedef struct LCDI2C_UNIT p;
+typedef struct LCDPARAMS lcdparams;
 struct LCDPARAMS 
 {
     struct LCDPARAMS* next; // Linked list
@@ -117,7 +119,7 @@ struct LCDPARAMS
     uint8_t backlight;         // Backlight
     uint8_t modeBits;          // Display on/off control bits
     uint8_t entryBits;         // Entry mode set bits
- 	 uint8_t lcdCommandBuffer[6];
+ 	uint8_t lcdCommandBuffer[6];
 };
 
 typedef enum {
@@ -137,8 +139,7 @@ typedef enum {
     LCD_DISPLAY_SHIFT
 } LCDCommands;
 
-
-struct LCDPARAMS* lcdInit(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t lines, uint8_t rows);
+struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p );
 bool lcdCommand          (struct LCDPARAMS* p1,LCDCommands command, LCDParamsActions action);
 bool lcdBacklight        (struct LCDPARAMS* p1,uint8_t command);
 bool lcdSetCursorPosition(struct LCDPARAMS* p1,uint8_t line, uint8_t row);
