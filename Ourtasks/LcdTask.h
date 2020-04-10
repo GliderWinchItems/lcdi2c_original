@@ -69,7 +69,7 @@ struct LCDI2C_UNIT* xLcdTaskcreateunit(I2C_HandleTypeDef* phi2c,
  * @param	: numcol = number of LCD columns
  * @return	: NULL = fail, otherwise pointer to unit on linked list
  * *************************************************************************/
-struct LCDI2C_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p);
+struct LCDTASK_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p);
 /* @brief	: Get a buffer for a LCD on I2C peripheral, and address
  * @param	: phi2c = pointer to I2C handle
  * @param	: address = I2C bus address

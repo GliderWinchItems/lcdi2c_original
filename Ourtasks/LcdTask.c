@@ -18,7 +18,7 @@
 #include "LcdTask.h"
 #include "lcd_hd44780_i2c.h"
 #include "morse.h"
-#include "yprintf"
+//#include "yprintf.h"
 
 enum LCD_STATE
 {
@@ -30,7 +30,7 @@ enum LCD_STATE
 
 osThreadId LcdTaskHandle = NULL;
 
-static I2C_HandleTypeDef* phi2c;	// Local copy of uart handle for LCD
+//static I2C_HandleTypeDef* phi2c;	// Local copy of uart handle for LCD
 
 /* Queue */
 #define QUEUESIZE 32	// Total size of bcb's other tasks can queue up
@@ -110,15 +110,15 @@ taskEXIT_CRITICAL();
 	return punit;
 }
 /* *************************************************************************
- * struct LCDI2C_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p);
+ * struct LCDTASK_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p);
  * @brief	: Get a buffer for a LCD on I2C peripheral, and address
  * @param	: phi2c = pointer to I2C handle
  * @param	: address = I2C bus address
  * @return	: NULL = fail, otherwise pointer to buffer struct
  * *************************************************************************/
-struct LCDI2C_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p)
+struct LCDTASK_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p)
 {
-	struct LCDI2C_LINEBUF* plb;
+	struct LCDTASK_LINEBUF* plb = NULL;
 	struct LCDI2C_UNIT* punit;
 	
 taskENTER_CRITICAL();
@@ -131,7 +131,7 @@ taskENTER_CRITICAL();
 		/* Check for I2C bus and address match. */
 		if ((punit->phi2c == p->phi2c) && (punit->address == p->address))
 		{ // Here found. Get struct for this LCD line buffer
-			plb = (struct LCDI2C_LINEBUF*)calloc(1,sizeof(struct LCDI2C_LINEBUF));
+			plb = (struct LCDTASK_LINEBUF*)calloc(1,sizeof(struct LCDTASK_LINEBUF));
 			if (plb == NULL) morse_trap(233);
 
 			// Pointer to lcd unit on linked list
@@ -191,7 +191,7 @@ void StartLcdTask(void* argument1)
 		{
 			if (punit->state == LCD_IDLE)
 			{
-				if (punit->take != punit->add)
+				if (punit->pptake != punit->ppadd)
 				{ // Here start a new buffer sequence
 				}
 			}
@@ -227,8 +227,7 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 osThreadId xLcdTaskCreate(uint32_t taskpriority, uint16_t numbcb)
 {
 	BaseType_t ret = xTaskCreate(StartLcdTask, "LcdTask",\
-     192, NULL, taskpriority,\
-     &LcdTaskHandle);
+                          192, NULL, taskpriority, LcdTaskHandle);
 	if (ret != pdPASS) return NULL;
 
 	LcdTaskQHandle = xQueueCreate(numbcb, sizeof(struct LCDTASK_LINEBUF*) );
@@ -241,11 +240,10 @@ osThreadId xLcdTaskCreate(uint32_t taskpriority, uint16_t numbcb)
  * @brief	: 
  * @return	: 
  * ************************************************************************************** */
-struct LCDTASKBCB* lcdprintf_init(void)
-{
-	yprintf_init();	// JIC not init'd
-	return;
-}
+//{
+//	yprintf_init();	// JIC not init'd
+//	return;
+//}
 /* **************************************************************************************
  * int yprintf(struct LCDTASK_LINEBUF** ppbcb, const char *fmt, ...);
  * @brief	: 'printf' for uarts
@@ -254,9 +252,10 @@ struct LCDTASKBCB* lcdprintf_init(void)
  * @param	: ... = usual printf arguments
  * @return	: Number of chars "printed"
  * ************************************************************************************** */
+#ifdef USETHEPRINTFWHENUARTANDYPRINTSETUPWITHCUBEMX
 int lcdprintf(struct LCDTASK_LINEBUF** ppbcb, int row, int col, const char *fmt, ...)
 {
-	struct LCDTASKBCB* pbcb = *ppbcb;
+	struct LCDTASK_LINEBUF* pbcb = *ppbcb;
 	va_list argp;
 
 	/* Block if this buffer is not available. SerialSendTask will 'give' the semaphore 
@@ -304,6 +303,7 @@ int lcdprintf(struct LCDTASK_LINEBUF** ppbcb, int row, int col, const char *fmt,
 
 	return pbcb->size;
 }
+#endif
 
 
 
