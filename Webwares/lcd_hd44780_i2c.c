@@ -36,6 +36,7 @@
 #include "string.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "LcdTask.h"
 #include "lcd_hd44780_i2c.h"
 #include "morse.h"
 
@@ -44,11 +45,8 @@ uint8_t lcdCommandBuffer[6] = {0x00};
 #ifdef OLDCODE
 static LCDParams lcdParams;
 #endif
-static struct LCDPARAMS lcdParams;
 
 static bool lcdWriteByte(struct LCDPARAMS* p1, uint8_t rsRwBits, uint8_t * data);
-
-static struct LCDPARAMS* phead = NULL;
 
 /**
  * @brief  Turn display on and init it params
@@ -61,47 +59,20 @@ static struct LCDPARAMS* phead = NULL;
  * @param  columns Number of colums
  * @return         true if success
  */
-struct LCDPARAMS* lcdInit(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t lines, uint8_t columns) 
+//struct LCDPARAMS* lcdInit(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t lines, uint8_t columns) 
+struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
 {
-	struct LCDPARAMS* p1 = phead;
-	struct LCDPARAMS* p2;
+    /* Original lcdInit only used LCDPARAMS. */
+    struct LCDPARAMS* p1 = &p->lcdparams;
 
     TickType_t xLastWakeTime;
 
     uint8_t lcdData = LCD_BIT_5x8DOTS;
 
-	if (HAL_I2C_GetState(hi2c) != HAL_I2C_STATE_READY) return NULL;
-
-	/* Check if this LCD unit is already 'init'd. */
-	if (p1 == NULL)
-	{ // Here list is empty
-		// Add a struct to the list
-		p2 = (struct LCDPARAMS*)calloc(1, sizeof(struct LCDPARAMS));
-		if (p2 == NULL) morse_trap(45);
-		phead = p2;
-		p1 = p2;
-	}
-	else
-	{
-		while (p1->next != NULL) 
-		{
-			if ((p1->hi2c == hi2c) && (p1->address == address))
-			{ // Here, already on list
-				return p1;
-			}
-			p1= p1->next; // Step to next on list
-		}
-
-		p2 = (struct LCDPARAMS*)calloc(1, sizeof(struct LCDPARAMS));
-		if (p2 == NULL) morse_trap(46);
-		p1->next = p2;
-		p1 = p2;
-	}
-
-	 p1->hi2c      = hi2c;
-    p1->address   = address << 1;
-    p1->lines     = lines;
-    p1->columns   = columns;
+	//p1->hi2c      = hi2c;
+    p1->address   = p->address << 1;
+    //p1->lines     = lines;
+    //p1->columns   = columns;
     p1->backlight = LCD_BIT_BACKIGHT_ON;
 
     p1->lcdCommandBuffer[0] = LCD_BIT_E | (0x03 << 4);
@@ -137,8 +108,13 @@ struct LCDPARAMS* lcdInit(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t line
         return NULL;
     }
 
+    uint16_t loopbreak = 0;
     while (HAL_I2C_GetState(p1->hi2c) != HAL_I2C_STATE_READY) {
         vTaskDelay(1);
+
+        // Do not let a disconnected unit hang the program.
+        loopbreak += 1; 
+        if (loopbreak > 100) return NULL;
     }
 
     /* Lets set display params */
