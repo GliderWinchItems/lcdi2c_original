@@ -18,6 +18,7 @@
 #include "LcdTask.h"
 #include "lcd_hd44780_i2c.h"
 #include "morse.h"
+#include "yprintf"
 
 enum LCD_STATE
 {
@@ -130,7 +131,7 @@ taskENTER_CRITICAL();
 		/* Check for I2C bus and address match. */
 		if ((punit->phi2c == p->phi2c) && (punit->address == p->address))
 		{ // Here found. Get struct for this LCD line buffer
-			plb = (struct LCDTASK_LINEBUF*)calloc(1,sizeof(struct LCDTASK_LINEBUF));
+			plb = (struct LCDI2C_LINEBUF*)calloc(1,sizeof(struct LCDI2C_LINEBUF));
 			if (plb == NULL) morse_trap(233);
 
 			// Pointer to lcd unit on linked list
