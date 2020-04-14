@@ -27,6 +27,7 @@
 #include "LcdTask.h"
 #include "lcd_hd44780_i2c.h"
 #include "morse.h"
+#include "DTW_counter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,7 +54,7 @@ osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = 256 * 4
 };
 /* USER CODE BEGIN PV */
 struct LCDI2C_UNIT* plcd4x20;
@@ -93,13 +94,13 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+  DTW_counter_init();
 
   /* USER CODE END SysInit */
 
@@ -139,9 +140,10 @@ int main(void)
   /* LCD task */
   osThreadId osRet;
   // Arguments: (priority, queue (LcdTaskQHandle) size for control block ptrs)
-  osRet = xLcdTaskCreate(0, 32); 
+//  osRet = xLcdTaskCreate(0, 32); 
   if (osRet == NULL) morse_trap(119);
-
+#ifdef DONOTDOTHIS
+  
   /* Instantiate each LCD unit with I2C, address, row, column */
   plcd4x20 = xLcdTaskcreateunit(&hi2c1,0x27,4,20);
   if (plcd4x20 == NULL) morse_trap(227);
@@ -151,10 +153,10 @@ int main(void)
   
   plcd2x16 = xLcdTaskcreateunit(&hi2c1,0x25,2,16);
   if (plcd2x16 == NULL) morse_trap(225);
-
+#endif
 
   /* USER CODE END RTOS_THREADS */
-
+while(1==1);
   /* Start scheduler */
   osKernelStart();
  
@@ -302,6 +304,7 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+while(1==1) osDelay(10);
 
   /* Get two line buffers 'a' and 'b' for 4x20 LCD. */
   struct LCDTASK_LINEBUF* pbuf4x20a = xLcdTaskintgetbuf(plcd4x20);

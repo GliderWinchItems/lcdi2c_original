@@ -178,6 +178,9 @@ taskEXIT_CRITICAL();
  * *************************************************************************/
 void StartLcdTask(void* argument1)
 {
+
+while(1==1) osDelay(10);
+
 	BaseType_t Qret;	// queue receive return
 
 	struct LCDTASK_LINEBUF* pssb; // Copied item from queue
@@ -307,7 +310,7 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 osThreadId xLcdTaskCreate(uint32_t taskpriority, uint16_t numbcb)
 {
 	BaseType_t ret = xTaskCreate(StartLcdTask, "LcdTask",\
-                          192, NULL, taskpriority, LcdTaskHandle);
+                          256, NULL, taskpriority, LcdTaskHandle);
 	if (ret != pdPASS) return NULL;
 
 	LcdTaskQHandle = xQueueCreate(numbcb, sizeof(struct LCDTASK_LINEBUF*) );
