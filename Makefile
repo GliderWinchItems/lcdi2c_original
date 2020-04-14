@@ -71,9 +71,6 @@ Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.c \
 Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c  
 
 C_SOURCES += Webwares/lcd_hd44780_i2c.c
-
-C_SOURCES += Ourtasks/LcdTask.c
-
 C_SOURCES += Ourwares/morse.c
 C_SOURCES += Ourwares/DTW_counter.c
 
@@ -147,7 +144,6 @@ C_INCLUDES =  \
 
 C_INCLUDES += -IWebwares
 C_INCLUDES += -IOurwares
-C_INCLUDES += -IOurtasks
 # /* USER CODE END */ 
 
 
