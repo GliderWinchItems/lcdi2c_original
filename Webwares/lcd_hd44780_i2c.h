@@ -120,6 +120,9 @@ struct LCDPARAMS
     uint8_t modeBits;          // Display on/off control bits
     uint8_t entryBits;         // Entry mode set bits
  	uint8_t lcdCommandBuffer[6];
+    uint8_t numrows;  // Number of rows (lines) for this LCD unit
+    uint8_t numcols;  // Number of columns for this LCD unit
+
 };
 
 typedef enum {
@@ -139,7 +142,18 @@ typedef enum {
     LCD_DISPLAY_SHIFT
 } LCDCommands;
 
-struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p );
+/* ********************************************************************/
+ int lcdInit(struct LCDI2C_UNIT* p );
+ /* @brief  Turn display on and init it params
+ * @note   We gonna make init steps according to datasheep page 46.
+ *         There are 4 steps to turn 4-bits mode on,
+ *         then we send initial params.
+ * @param  p = pointer to control block for instantiated LCD unit
+ * @return  0 = success
+ *         -1 = DMA in for loop
+ *         -2 = DMA for 4 bit mode
+ *         -3 = loop break
+ ***********************************************************************/
 bool lcdCommand          (struct LCDPARAMS* p1,LCDCommands command, LCDParamsActions action);
 bool lcdBacklight        (struct LCDPARAMS* p1,uint8_t command);
 bool lcdSetCursorPosition(struct LCDPARAMS* p1,uint8_t line, uint8_t row);

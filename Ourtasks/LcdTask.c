@@ -20,13 +20,25 @@
 #include "morse.h"
 //#include "yprintf.h"
 
+//osSemaphoreId vsnprintfSemaphoreHandle;
+#define NOYPRINTFISPRESENT
+#ifdef NOYPRINTFISPRESENT
+SemaphoreHandle_t vsnprintfSemaphoreHandle;
+#endif
+
 enum LCD_STATE
 {
 	LCD_IDLE,
+	LCD_SETRC,
 	LCD_ROW,
 	LCD_COL,
-	LCD_CHAR
+	LCD_CHR
 };
+
+#define DELAY_ROW 1; // Delay for row 
+#define DELAY_COL 1; // Delay for col
+#define DELAY_CHR 1; // Delay following each char
+#define DELAY_SETRC 20; // Delay following set cursor row column
 
 osThreadId LcdTaskHandle = NULL;
 
@@ -57,8 +69,6 @@ struct LCDI2C_UNIT* xLcdTaskcreateunit(I2C_HandleTypeDef* phi2c,
 {
 	struct LCDI2C_UNIT* punit;
 	struct LCDI2C_UNIT* ptmp;
-	struct LCDPARAMS* pu1;
-
 
 taskENTER_CRITICAL();
 	/* Check if this I2C bus & address (i.e. unit) is already present. */
@@ -98,14 +108,16 @@ taskENTER_CRITICAL();
 	punit->ppend   = &punit->pcb[LCDCIRPTRSIZE];
 
 	/* The remainder of LCDPARAMS will be initialized in the lcdInit() below. */
-	punit->lcdparams.lines    = numrow;  // number of LCD rows
-	punit->lcdparams.columns  = numcol;  // number of LCD columns
+	punit->lcdparams.numrows  = numrow;  // number of LCD rows
+	punit->lcdparams.numcols  = numcol;  // number of LCD columns
+
+	punit->state = LCD_IDLE; // Start off in idle (after final intialization)
 
 taskEXIT_CRITICAL();
 
 	/* Complete the initialization the LCD unit */
-	pu1 = lcdInit(punit);
-	if (pu1 == NULL) morse_trap(237);
+	int tmp = lcdInit(punit);
+	if (tmp != 0) morse_trap(237);
 
 	return punit;
 }
@@ -137,8 +149,12 @@ taskENTER_CRITICAL();
 			// Pointer to lcd unit on linked list
 			plb->punit = punit;
 
+			/* Save max size of buffer allocated. */
+			plb->bufmax = (punit->lcdparams.lines * punit->lcdparams.columns);
+
 			// Get char buffer for up to max chars this unit displays. */
-			plb->pbuf = (uint8_t*)calloc((punit->lcdparams.lines * punit->lcdparams.columns),sizeof(uint8_t));
+			plb->pbuf = (uint8_t*)calloc(plb->bufmax,sizeof(uint8_t));
+			if (plb->pbuf == NULL) morse_trap(236);
 
 			// Create buffer semaphore
 			plb->semaphore = xSemaphoreCreateBinary(); // Semaphore for this buffer
@@ -150,7 +166,7 @@ taskENTER_CRITICAL();
 		}
 		punit = punit->pnext;
 	}
-	/* Not found. Can this really happen? */
+	/* Here: Likely this unit never got instantiated. */
 	morse_trap(235);
 
 taskEXIT_CRITICAL();
@@ -165,13 +181,15 @@ void StartLcdTask(void* argument1)
 	BaseType_t Qret;	// queue receive return
 
 	struct LCDTASK_LINEBUF* pssb; // Copied item from queue
+	struct LCDTASK_LINEBUF* plbtmp;
 	struct LCDI2C_UNIT* punit;				
-	struct LCDI2C_UNIT* ptmp;				
+	struct LCDI2C_UNIT* ptmp;
+	TickType_t ttx;
 
   /* Infinite loop */
   for(;;)
   {
-		osDelay(6); // Polling Q & timing states
+		osDelay(4); // Polling Q & timing states
 
 		do // new queued items in unit circular buffers.
 		{
@@ -180,8 +198,18 @@ void StartLcdTask(void* argument1)
 			{ // Here we have a queued item
 				ptmp = pssb->punit;  // Point to "unit" struct
 				*ptmp->ppadd = pssb; // Add pointer to circular buffer
-				ptmp->ppadd += 1;    // Advance working pointer
+				ptmp->ppadd += 1;    // Advance "add" pointer
 				if (ptmp->ppadd == ptmp->ppend) ptmp->ppadd = ptmp->ppbegin;
+
+				if (ptmp->state == LCD_IDLE)
+				{ // Here, this LCD unit is idle, so begin.
+					// Set cursor position
+					lcdSetCursorPosition(&ptmp->lcdparams, pssb->columns, pssb->lines);
+
+					// Get time to end delay after sending row/column
+    				ptmp->untiltickct = xTaskGetTickCount() + DELAY_SETRC; 
+    				ptmp->state = LCD_CHR; // Next state
+				}
 			}
 		} while (Qret == pdPASS);
 
@@ -189,16 +217,68 @@ void StartLcdTask(void* argument1)
 		punit = phdunit;
 		while (punit != NULL)
 		{
-			if (punit->state == LCD_IDLE)
+			ttx = xTaskGetTickCount();
+			plbtmp = *punit->pptake;
+			switch (punit->state)
 			{
+			case LCD_IDLE: // Waiting for app to load queue
 				if (punit->pptake != punit->ppadd)
 				{ // Here start a new buffer sequence
-				}
-			}
-			else
-			{ // State check
-				
+					lcdSetCursorPosition(&punit->lcdparams, pssb->columns, pssb->lines);
 
+					// Get time to end delay after sending row/column
+	   				punit->untiltickct = ttx + DELAY_SETRC; 
+  					punit->state = LCD_CHR; // Next state
+				}
+				break;
+
+			case LCD_SETRC: // Waiting for set cursor
+				if ((int)(ttx - punit->untiltickct) >= 0)
+				{
+					plbtmp->pbuf += 1;
+   	    			lcdPrintStr(&punit->lcdparams,plbtmp->pbuf, 1);
+   					punit->untiltickct = ttx + DELAY_COL; 
+   					punit->state = LCD_CHR;
+				}
+				break;
+
+			case LCD_CHR:
+				// Wait for time expiration after sending a display char
+				if ((int)(ttx - punit->untiltickct) >= 0)
+				{
+					plbtmp->pbuf += 1;
+					plbtmp->size -= 1;
+					if (plbtmp->size > 0)
+					{ // Continue sending
+   	    				lcdPrintStr(&punit->lcdparams,plbtmp->pbuf, 1);
+    					punit->untiltickct = ttx + DELAY_CHR; 
+   	    			}
+   	    			else
+   	    			{ // Here, buffer has been sent (or last char is sending)
+
+						// Release buffer just sent so it can be reused. 
+						xSemaphoreGive( plbtmp->semaphore );
+
+   	    				// Advance ptr to circular buffer of ptrs
+   	    				punit->pptake += 1;
+   	    				if (punit->pptake == punit->ppend) 
+   	    					punit->pptake = punit->ppbegin;
+
+   	    				// Any more buffers waiting?
+   	    				if (punit->pptake == punit->ppadd)
+   	    				{ // No. We are done!
+   	    					punit->state = LCD_IDLE;	
+   	    				}
+   	    				else
+   	    				{ // Start next buffer
+							lcdSetCursorPosition(&punit->lcdparams, pssb->columns, pssb->lines);
+
+   							punit->untiltickct = ttx + DELAY_SETRC; 
+   							punit->state = LCD_CHR;
+   	    				}    	    				
+   	    			}
+				}
+				break;
 			}	
 			punit = punit->pnext;
 		}
@@ -212,8 +292,8 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	
-    HAL_I2C_Master_Transmit_IT(p2->hi2c, p2->address, (uint8_t*)p2->lcdCommandBuffer, 6) != HAL_OK) 
-	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+    if (HAL_I2C_Master_Transmit_IT(p2->hi2c, p2->address, (uint8_t*)p2->lcdCommandBuffer, 6) != HAL_OK) 
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	return;
 }
 #endif
@@ -233,6 +313,9 @@ osThreadId xLcdTaskCreate(uint32_t taskpriority, uint16_t numbcb)
 	LcdTaskQHandle = xQueueCreate(numbcb, sizeof(struct LCDTASK_LINEBUF*) );
 	if (LcdTaskQHandle == NULL) return NULL;
 
+#ifdef NOYPRINTFISPRESENT
+	vsnprintfSemaphoreHandle = xSemaphoreCreateMutex();
+#endif
 	return LcdTaskHandle;
 }
 /* **************************************************************************************
@@ -245,65 +328,81 @@ osThreadId xLcdTaskCreate(uint32_t taskpriority, uint16_t numbcb)
 //	return;
 //}
 /* **************************************************************************************
- * int yprintf(struct LCDTASK_LINEBUF** ppbcb, const char *fmt, ...);
+ * int lcdi2cprintf(struct LCDTASK_LINEBUF** pplb, int row, int col, const char *fmt, ...);
  * @brief	: 'printf' for uarts
- * @param	: pbcb = pointer to pointer to stuct with info
+ * @param	: pblb = pointer to pointer to line buff struct
+ * @param   : row = row number (0-n) to position cursor
+ * @param   : col = column number (0-n) to position cursor
  * @param	: format = usual printf format
  * @param	: ... = usual printf arguments
  * @return	: Number of chars "printed"
  * ************************************************************************************** */
-#ifdef USETHEPRINTFWHENUARTANDYPRINTSETUPWITHCUBEMX
-int lcdprintf(struct LCDTASK_LINEBUF** ppbcb, int row, int col, const char *fmt, ...)
+int lcdi2cprintf(struct LCDTASK_LINEBUF** pplb, int row, int col, const char *fmt, ...)
 {
-	struct LCDTASK_LINEBUF* pbcb = *ppbcb;
+	struct LCDTASK_LINEBUF* plb = *pplb;
 	va_list argp;
 
 	/* Block if this buffer is not available. SerialSendTask will 'give' the semaphore 
       when the buffer has been sent. */
-	xSemaphoreTake(pbcb->semaphore, 6001);
+	xSemaphoreTake(plb->semaphore, 6001);
+
+	plb->lines   = row;
+	plb->columns = col;
 
 	/* Block if vsnprintf is being uses by someone else. */
 	xSemaphoreTake( vsnprintfSemaphoreHandle, portMAX_DELAY );
 
 	/* Construct line of data.  Stop filling buffer if it is full. */
 	va_start(argp, fmt);
-	pbcb->size = vsnprintf((char*)(pbcb->pbuf+2),pbcb->bufsize, fmt, argp);
+	plb->size = vsnprintf((char*)plb->pbuf,plb->bufmax, fmt, argp);
 	va_end(argp);
 
-	/* Line to send has two leading control/command bytes. */
-	pbcb->size += 2; // Adjust size
-
-	/* Limit byte count in BCB to be put on queue, from vsnprintf to max buffer sizes. */
-	if (pbcb->size > pbcb->bufsize) 
-			pbcb->size = pbcb->bufsize;
-
-	/* Set row & column codes */
-	uint8_t* p = pbcb->pbuf;
-	*p++ = (254); // move cursor command
-
-	// determine position
-	if (row == 0) {
-		*p = (128 + col);
-	} else if (row == 1) {
-		*p = (192 + col);
-	} else if (row == 2) {
-		*p = (148 + col);
-	} else if (row == 3) {
-		*p = (212 + col);
-	}
+	/* Limit byte count to be put on queue, from vsnprintf to max buffer sizes. */
+	if (plb->size > plb->bufmax) 
+			plb->size = plb->bufmax;
 
 	/* Release semaphore controlling vsnprintf. */
 	xSemaphoreGive( vsnprintfSemaphoreHandle );
 
 	/* JIC */
-	if (pbcb->size == 0) return 0;
+	if (plb->size == 0) return 0;
 
-	/* Place Buffer Control Block on queue to SerialTaskSend */
-	vSerialTaskSendQueueBuf(ppbcb); // Place on queue
+	/* Place Buffer Control Block pointer on queue to LcdTask */
+	xQueueSendToBack(LcdTaskQHandle, pplb, 0);
 
-	return pbcb->size;
+	return plb->size;
 }
-#endif
+/* **************************************************************************************
+ * int lcdi2cputs(struct LCDTASK_LINEBUF** pplb, int row, int col, char* pchr);
+ * @brief	: Send zero terminated string to SerialTaskSend
+ * @param	: pbcb = pointer to pointer to stuct with uart pointers and buffer parameters
+ * @param   : row = row number (0-n) to position cursor
+ * @param   : col = column number (0-n) to position cursor
+ * @return	: Number of chars sent
+ * ************************************************************************************** */
+int lcdi2cputs(struct LCDTASK_LINEBUF** pplb, int row, int col, char* pchr)
+{
+	struct LCDTASK_LINEBUF* plb = *pplb;
+	int sz = strlen(pchr); // Check length of input string
+	if (sz == 0) return 0;
 
+	/* Block (for a while) if this buffer is not yet available. 
+      when the buffer has been sent. */
+	xSemaphoreTake(plb->semaphore, 1024);
 
+	// Save cursor position
+	plb->lines   = row; 	
+	plb->columns = col;
 
+	strncpy((char*)plb->pbuf,pchr,plb->bufmax);	// Copy and limit size.
+
+	/* Set size sent. */
+	if (sz >= plb->bufmax)	// Did strcpy truncate?
+		plb->size = plb->bufmax;	// Yes
+	else
+		plb->size = sz;	// No
+
+	/* Place pointer to Buffer Control Block pointer on queue to LcdTask */
+	xQueueSendToBack(LcdTaskQHandle, pplb, 0);
+	return plb->size; 
+}

@@ -49,18 +49,18 @@ static LCDParams lcdParams;
 static bool lcdWriteByte(struct LCDPARAMS* p1, uint8_t rsRwBits, uint8_t * data);
 
 /**
+ * int lcdInit(struct LCDI2C_UNIT* p );
  * @brief  Turn display on and init it params
  * @note   We gonna make init steps according to datasheep page 46.
  *         There are 4 steps to turn 4-bits mode on,
  *         then we send initial params.
- * @param  hi2c    I2C struct to which display is connected
- * @param  address Display I2C 7-bit address
- * @param  lines   Number of lines of display
- * @param  columns Number of colums
- * @return         true if success
+ * @param  p = pointer to control block for instantiated LCD unit
+ * @return  0 = success
+ *         -1 = DMA in for loop
+ *         -2 = DMA for 4 bit mode
+ *         -3 = loop break
  */
-//struct LCDPARAMS* lcdInit(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t lines, uint8_t columns) 
-struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
+int lcdInit(struct LCDI2C_UNIT* p )
 {
     /* Original lcdInit only used LCDPARAMS. */
     struct LCDPARAMS* p1 = &p->lcdparams;
@@ -82,7 +82,7 @@ struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
     /* First 3 steps of init cycles. They are the same. */
     for (uint8_t i = 0; i < 3; ++i) {
         if (HAL_I2C_Master_Transmit_DMA(p1->hi2c, p1->address, (uint8_t*)p1->lcdCommandBuffer, 3) != HAL_OK) {
-            return NULL;
+            return -1;
         }
 
         xLastWakeTime = xTaskGetTickCount();
@@ -105,7 +105,7 @@ struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
     p1->lcdCommandBuffer[2] = LCD_BIT_BACKIGHT_ON | (LCD_MODE_4BITS << 4);
 
     if (HAL_I2C_Master_Transmit_DMA(p1->hi2c, p1->address, (uint8_t*)p1->lcdCommandBuffer, 3) != HAL_OK) {
-        return NULL;
+        return -2;
     }
 
     uint16_t loopbreak = 0;
@@ -114,7 +114,7 @@ struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
 
         // Do not let a disconnected unit hang the program.
         loopbreak += 1; 
-        if (loopbreak > 100) return NULL;
+        if (loopbreak > 100) return -3;
     }
 
     /* Lets set display params */
@@ -137,7 +137,7 @@ struct LCDPARAMS* lcdInit(struct LCDI2C_UNIT* p )
     lcdDisplayClear(p1);
     lcdCursorHome(p1);
 
-    return p1;
+    return 0;
 }
 
 /**

@@ -142,7 +142,7 @@ int main(void)
   osRet = xLcdTaskCreate(0, 32); 
   if (osRet == NULL) morse_trap(119);
 
-  /* Instantiate each LCD unit with I2C and address on bus. */
+  /* Instantiate each LCD unit with I2C, address, row, column */
   plcd4x20 = xLcdTaskcreateunit(&hi2c1,0x27,4,20);
   if (plcd4x20 == NULL) morse_trap(227);
   
@@ -303,33 +303,32 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
 
+  /* Get two line buffers 'a' and 'b' for 4x20 LCD. */
+  struct LCDTASK_LINEBUF* pbuf4x20a = xLcdTaskintgetbuf(plcd4x20);
+  struct LCDTASK_LINEBUF* pbuf4x20b = xLcdTaskintgetbuf(plcd4x20);
+  struct LCDTASK_LINEBUF* pbuf4x20c = xLcdTaskintgetbuf(plcd4x20);
+  struct LCDTASK_LINEBUF* pbuf4x20d = xLcdTaskintgetbuf(plcd4x20);
+  if (pbuf4x20a == NULL) morse_trap(240);
+  if (pbuf4x20b == NULL) morse_trap(241);
+  if (pbuf4x20c == NULL) morse_trap(242);
+  if (pbuf4x20d == NULL) morse_trap(243);
 
+    // Set cursor and print at zero position of line 1
+    lcdi2cputs(&pbuf4x20a,0,0,"1 Hello,");
 
-//	struct LCDPARAMS* pu1;
-	struct LCDPARAMS* pu1 = &plcd4x20->lcdparams;
-	if (pu1 == NULL) morse_trap(55);
-    // Print text and home position 0,0
-    lcdPrintStr(pu1,(uint8_t*)"1 Hello,", 8);
+    // Set cursor and print at zero position of line 2
+    lcdi2cputs(&pbuf4x20b,0,1,"2 This is a test!");
 
-    // Set cursor at zero position of line 2
-    lcdSetCursorPosition(pu1,0, 1);
-    // Print text at cursor position
-    lcdPrintStr(pu1,(uint8_t*)"2 GWIlcd ", 9);
+    // Set cursor and print at zero position of line 3
+    lcdi2cputs(&pbuf4x20c,0,2,"3 lcdic2X2 ");
 
-    // Set cursor at zero position of line 3
-    lcdSetCursorPosition(pu1,0, 2);
-    // Print text at cursor position
-    lcdPrintStr(pu1,(uint8_t*)"3 lcdic2X2 ", 10);
-
-    // Set cursor at zero position of line 4
-    lcdSetCursorPosition(pu1,0, 3);
-    // Print text at cursor position
-    lcdPrintStr(pu1,(uint8_t*)"4 abcdefghijklmnopqr", 20);
+    // Set cursor and print at zero position of line 3
+    lcdi2cputs(&pbuf4x20d,0,3,"4 abcdefghijklmnopqr");
 
 
     for (;;) {
 		HAL_GPIO_TogglePin(GPIOD,GPIO_PIN_15); // BLUE LED
-      vTaskDelay(1000);
+      vTaskDelay(512);
 
     }
   /* USER CODE END 5 */ 

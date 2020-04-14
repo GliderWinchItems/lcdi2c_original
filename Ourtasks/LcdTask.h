@@ -23,7 +23,8 @@ struct LCDTASK_LINEBUF
 	struct LCDI2C_UNIT* punit;  // Point to linked list entry for this I2C:address unit
 	SemaphoreHandle_t semaphore;// Semaphore handle
 	uint8_t* pbuf;              // Pointer to byte buffer to be sent
-	uint8_t size;               // Number of bytes to be sent
+	uint8_t bufmax;             // Size of char buffer
+	 int8_t size;               // Number of bytes to be sent
 	uint8_t lines;              // Row start
     uint8_t columns;            // Column start
 };
@@ -42,10 +43,9 @@ struct LCDI2C_UNIT
 	struct LCDTASK_LINEBUF* pcb[LCDCIRPTRSIZE];
 
 	struct LCDPARAMS lcdparams;
+	TickType_t untiltickct; // Tickcount for the end of a delay
 	uint8_t address;  // Not-shifted address
 	uint8_t state;    // State machine
-	uint8_t delayctr; // Working counter for delays
-	uint8_t ctr;      // Delay counter
 };
 
 /* *************************************************************************/
@@ -75,17 +75,24 @@ struct LCDTASK_LINEBUF* xLcdTaskintgetbuf(struct LCDI2C_UNIT* p);
  * @param	: address = I2C bus address
  * @return	: NULL = fail, otherwise pointer to buffer struct
  * *************************************************************************/
-
-
+int lcdi2cprintf(struct LCDTASK_LINEBUF** pplb, int row, int col, const char *fmt, ...);
+/* @brief	: 'printf' for uarts
+ * @param	: pblb = pointer to pointer to line buff struct
+ * @param   : row = row number (0-n) to position cursor
+ * @param   : col = column number (0-n) to position cursor
+ * @param	: format = usual printf format
+ * @param	: ... = usual printf arguments
+ * @return	: Number of chars "printed"
+ * ************************************************************************************** */
+int lcdi2cputs(struct LCDTASK_LINEBUF** pplb, int row, int col, char* pchr);
+/* @brief	: Send zero terminated string to SerialTaskSend
+ * @param	: pbcb = pointer to pointer to stuct with uart pointers and buffer parameters
+ * @param   : row = row number (0-n) to position cursor
+ * @param   : col = column number (0-n) to position cursor
+ * @return	: Number of chars sent
+ * ************************************************************************************** */
 
 extern osMessageQId LcdTaskQHandle;
 extern osThreadId   LcdTaskHandle;
 
-/* Macros for simplifying the wait and loading of the queue */
-#define mLcdTaskWait( noteval, bit){while((noteval & bit) == 0){xTaskNotifyWait(bit, 0, &noteval, 5000);}}
-#define mLcdTaskQueueBuf(bcb){uint32_t qret;do{qret=xQueueSendToBack(LcdTaskQHandle,bcb,portMAX_DELAY);}while(qret == errQUEUE_FULL);}
-
-#define mLcdTaskQueueBuf2(bcb,bit){uint32_t qret;do{noteval&=~bit;qret=xQueueSendToBack(LcdTaskQHandle,bcb,portMAX_DELAY);}while(qret == errQUEUE_FULL);}
-
 #endif
-
